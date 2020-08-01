@@ -32,8 +32,8 @@ Resources:
           !Sub "${EnvironmentName}-VPCID"
       SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: 8080
-        ToPort: 8080
+        FromPort: 80
+        ToPort: 80
         CidrIp: 0.0.0.0/0
       - IpProtocol: tcp
         FromPort: 22
@@ -44,7 +44,7 @@ Resources:
         FromPort: 0
         ToPort: 65535
         CidrIp: 0.0.0.0/0
-  UdacityEC2role:
+  UdacityS3ReadOnlyEC2:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
@@ -57,24 +57,22 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
-  Policies:
-    Type: 'AWS::IAM::Policy'
-    Properties:
-      PolicyName: bucketpolicy
-      PolicyDocument: 
-        Statement:
-            Effect: Allow
-            Action: "s3:*"
-            Resource: "*"
-      Roles: 
-        !Ref udacityEC2role
-
+      Policies:
+        - PolicyName: PolicyBucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 's3:*'
+                Resource: '*'
+  
   WebServerInstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
       Path: /
       Roles:
-        - !Ref UdacityEC2role 
+        - !Ref UdacityS3ReadOnlyEC2 
   WebAppLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
@@ -90,14 +88,14 @@ Resources:
           unzip -o udacity.zip
           systemctl start apache2.service
       ImageId: ami-003634241a8fcdec0
-      IAMinstanceProfile: !Ref WebServerInstanceProfile
+      IamInstanceProfile: !Ref WebServerInstanceProfile
       SecurityGroups:
-      - Ref: WebServerSecGroup
-      InstanceType: t3.small
+        - Ref: WebServerSecGroup
+      InstanceType: t2.small
       BlockDeviceMappings:
-      - DeviceName: "/dev/sdk"
-        Ebs:
-          VolumeSize: '10'
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
   WebAppGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -143,12 +141,12 @@ Resources:
   WebAppTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 8
+      HealthCheckIntervalSeconds: 15
       HealthCheckPath: /
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 6
+      HealthCheckTimeoutSeconds: 12
       HealthyThresholdCount: 3
-      Port: 8080
+      Port: 80
       Protocol: HTTP
       UnhealthyThresholdCount: 3
       VpcId: 
@@ -156,7 +154,7 @@ Resources:
           Fn::Sub: "${EnvironmentName}-VPCID"
 Outputs:
   LoadBalancerEndpoint: 
-    Description: Endpoint to use for accessing the load balancer
+    Description: Endpoint to use for exploring the loadbalancer
     Value: !Join [ "", [ 'http://', !GetAtt WebAppLB.DNSName  ]]
     Export:
       Name: !Sub ${EnvironmentName}-LBURLZ
